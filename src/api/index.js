@@ -8,7 +8,12 @@ import aiRoutes from '../server/routes/aiRoutes.js';
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://ai-job-setup.vercel.app']
+    : '*',
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
