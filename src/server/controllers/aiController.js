@@ -16,7 +16,7 @@ export const generateRubrics = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     const prompt = `You are an expert HR consultant. Generate 4-5 detailed evaluation rubrics for the "${stageId.replace(/_/g, ' ')}" stage of hiring for a "${designation}" position.`;
 
@@ -78,7 +78,7 @@ export const chatWithAI = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     // Build conversation context
     const conversationContext = chatHistory
@@ -170,7 +170,7 @@ export const generateQuestions = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     const prompt = `You are an expert HR consultant. Generate 10 interview questions for the "${stageId.replace(/_/g, ' ')}" stage of hiring for a "${designation}" position.
 
@@ -242,7 +242,7 @@ export const analyzeJobDescription = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     const prompt = `Analyze this job description for a "${designation}" position and extract key insights:
 

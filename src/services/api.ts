@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta?.env?.VITE_API_URL ||'https://ai-job-setup.vercel.app/api';
+const API_BASE_URL = import.meta?.env?.VITE_API_URL || 'https://ai-job-setup.onrender.com/api';
 
 // Generic fetch wrapper
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
