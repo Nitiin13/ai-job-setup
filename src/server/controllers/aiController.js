@@ -16,7 +16,7 @@ export const generateRubrics = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     // Enhanced prompt with more context and structure
     const stageContext = getStageContext(stageId);
@@ -127,7 +127,7 @@ export const chatWithAI = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     // Build conversation context
     const conversationContext = chatHistory
@@ -255,7 +255,7 @@ export const generateQuestions = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     // Enhanced prompt for audio interview questions
     const prompt = `You are an expert technical interviewer with deep experience in conducting ${stageId.replace(/_/g, ' ')} for ${designation} positions.
