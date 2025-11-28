@@ -427,7 +427,7 @@ Only return the JSON object, no additional text.`;
 function getStageContext(stageId) {
   const contexts = {
     resume_screening: 'Initial screening to filter candidates based on resume/CV before any interviews. This is a paper-based evaluation to shortlist candidates.',
-    audio_interview: 'First verbal interaction with candidate via phone/video call (30-45 min). Focus on communication skills, role-specific scenarios, and cultural fit. For customer-facing roles: assess empathy, problem-solving, and service orientation. For sales roles: evaluate persuasion skills, objection handling, and relationship building.',
+    audio_interview: 'First verbal interaction with candidate via phone/video call (30-45 min). Focus on communication skills, role-specific scenarios. For customer-facing roles: assess empathy, problem-solving, and service orientation. For sales roles: evaluate persuasion skills, objection handling, and relationship building.',
     assignment: 'Practical assignment to evaluate role-specific skills. For customer-facing roles: simulate customer interactions, complaint resolution, or support scenarios. For sales roles: create pitch decks, handle mock sales calls, or develop account strategies.',
     personal_interview: 'In-depth face-to-face/video interview (60-90 min) with potential team members. For customer-facing roles: deep dive into customer service philosophy, conflict resolution examples, and stakeholder management. For sales roles: explore sales methodology, negotiation experience, pipeline management, and client relationship success stories.',
     founders_round: 'Final interview with company founders/C-level executives. Focus on vision alignment, growth mindset, and cultural impact. For customer-facing roles: assess brand ambassadorship and customer advocacy potential. For sales roles: evaluate revenue generation thinking, market understanding, and strategic account development capabilities.',
@@ -450,7 +450,6 @@ function getStageRequirements(stageId, designation) {
 - Assess customer empathy and relationship-building ability through discussion
 - For sales roles: discuss sales approach, objection handling, and closing techniques
 - For customer-facing roles: explore service philosophy and conflict resolution strategies
-- Gauge cultural fit, motivation, and alignment with company values
 - Questions should elicit real-world examples and scenario responses (3-5 minutes each)
 - NO written assignments, NO presentations during this call`,
     
