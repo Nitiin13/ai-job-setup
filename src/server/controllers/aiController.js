@@ -427,10 +427,10 @@ Only return the JSON object, no additional text.`;
 function getStageContext(stageId) {
   const contexts = {
     resume_screening: 'Initial screening to filter candidates based on resume/CV before any interviews. This is a paper-based evaluation to shortlist candidates.',
-    audio_interview: 'First verbal interaction with candidate via phone/video call (30-45 min). Focus on communication, cultural fit, and technical discussion without coding. This is NOT a coding round.',
-    assignment: 'Take-home technical assignment to evaluate practical coding skills, problem-solving, and code quality. Candidates submit code for review.',
-    personal_interview: 'In-depth face-to-face/video interview (60-90 min) with potential team members. Deep dive into experience, projects, and technical expertise.',
-    founders_round: 'Final interview with company founders/C-level executives. Focus on vision alignment, leadership potential, and cultural impact.',
+    audio_interview: 'First verbal interaction with candidate via phone/video call (30-45 min). Focus on communication skills, role-specific scenarios, and cultural fit. For customer-facing roles: assess empathy, problem-solving, and service orientation. For sales roles: evaluate persuasion skills, objection handling, and relationship building.',
+    assignment: 'Practical assignment to evaluate role-specific skills. For customer-facing roles: simulate customer interactions, complaint resolution, or support scenarios. For sales roles: create pitch decks, handle mock sales calls, or develop account strategies.',
+    personal_interview: 'In-depth face-to-face/video interview (60-90 min) with potential team members. For customer-facing roles: deep dive into customer service philosophy, conflict resolution examples, and stakeholder management. For sales roles: explore sales methodology, negotiation experience, pipeline management, and client relationship success stories.',
+    founders_round: 'Final interview with company founders/C-level executives. Focus on vision alignment, growth mindset, and cultural impact. For customer-facing roles: assess brand ambassadorship and customer advocacy potential. For sales roles: evaluate revenue generation thinking, market understanding, and strategic account development capabilities.',
   };
   return contexts[stageId] || 'Evaluation stage in the hiring process';
 }
@@ -440,45 +440,47 @@ function getStageRequirements(stageId, designation) {
   const requirements = {
     resume_screening: `- Focus on resume/CV screening criteria ONLY
 - Evaluate quantifiable achievements, not potential
-- Check technical skills match against job requirements
-- Assess experience relevance and career progression
-- Consider education and certifications
-- NO interview-based criteria (communication, personality, etc.)`,
+- Check relevant skills match against job requirements (communication, sales metrics, customer service experience)
+- Assess experience relevance and career progression in customer-facing or sales roles
+- Consider education, certifications, and industry-specific training
+- NO interview-based criteria (personality, presence, etc.)`,
     
-    audio_interview: `- This is a PHONE/VIDEO conversation (NO coding, NO screen sharing)
-- Evaluate verbal communication and articulation skills
-- Assess technical depth through DISCUSSION, not coding
-- Gauge cultural fit and motivation through conversation
-- Check problem-solving APPROACH, not code implementation
-- For ${designation}, focus on role-specific technical discussions
-- Questions should be answerable verbally in 3-5 minutes
-- NO whiteboard, NO live coding, NO assignments`,
+    audio_interview: `- This is a PHONE/VIDEO conversation focused on communication and role fit
+- Evaluate verbal communication, tone, and active listening skills
+- Assess customer empathy and relationship-building ability through discussion
+- For sales roles: discuss sales approach, objection handling, and closing techniques
+- For customer-facing roles: explore service philosophy and conflict resolution strategies
+- Gauge cultural fit, motivation, and alignment with company values
+- Questions should elicit real-world examples and scenario responses (3-5 minutes each)
+- NO written assignments, NO presentations during this call`,
     
-    assignment: `- Evaluate actual CODE submitted by candidate
-- Focus on code quality, structure, and best practices
-- Check problem-solving through working solution
-- Assess testing, documentation, and edge case handling
-- For ${designation}, check role-specific technical implementation
-- Review Git practices, commit messages, and code organization`,
+    assignment: `- Evaluate actual work product submitted by candidate
+- For sales roles: review pitch decks, sales plans, or mock client proposals for clarity and persuasiveness
+- For customer-facing roles: assess support scenario responses, email communication quality, or process documentation
+- Check problem-solving approach through realistic simulations
+- Evaluate professionalism, attention to detail, and customer-centric thinking
+- For ${designation}, check role-specific competencies and practical skills
+- Review organization, completeness, and follow-through`,
     
-    personal_interview: `- Deep technical discussion with potential team members
-- Evaluate past project experiences in detail
-- Assess collaboration and leadership capabilities
-- Check growth mindset and learning attitude
-- For ${designation}, verify hands-on expertise and technical depth
-- Can include whiteboard discussions and architecture design`,
+    personal_interview: `- Deep dive into past customer/client experiences and success stories
+- For sales roles: explore deal cycles, negotiation wins, pipeline management, and quota achievement
+- For customer-facing roles: discuss customer retention strategies, escalation handling, and service excellence
+- Assess collaboration with cross-functional teams (product, support, marketing)
+- Check adaptability, resilience, and learning from failures
+- For ${designation}, verify hands-on experience and situational expertise
+- Can include role-play scenarios or case study discussions`,
     
     founders_round: `- Evaluate strategic thinking and business acumen
-- Assess alignment with company vision and culture
-- Check leadership potential for future growth
-- For ${designation}, verify how they can drive impact
-- Focus on long-term value and cultural contribution
-- Understand career motivations and aspirations`,
+- Assess alignment with company vision, mission, and culture
+- For sales roles: check revenue growth mindset, market understanding, and account expansion thinking
+- For customer-facing roles: verify customer advocacy potential and brand ambassadorship
+- Check leadership potential and ability to influence company culture
+- For ${designation}, verify how they can drive customer satisfaction and business impact
+- Understand career motivations, long-term aspirations, and commitment to growth`,
   };
   
   return requirements[stageId] || 'Standard evaluation criteria for this stage';
 }
-
 // Helper function to get default rubrics
 function getDefaultRubricsForStage(stageId, designation) {
   const defaultRubrics = {
