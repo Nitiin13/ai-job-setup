@@ -18,7 +18,56 @@ export const generateRubrics = async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
-    const prompt = `You are an expert HR consultant. Generate 4-5 detailed evaluation rubrics for the "${stageId.replace(/_/g, ' ')}" stage of hiring for a "${designation}" position.`;
+    // Enhanced prompt with more context and structure
+    const stageContext = getStageContext(stageId);
+    
+    const prompt = `You are an expert HR consultant and talent acquisition specialist with 15+ years of experience in technical hiring.
+
+CONTEXT:
+- Position: ${designation}
+- Interview Stage: ${stageId.replace(/_/g, ' ')}
+- Stage Purpose: ${stageContext}
+${jobDescription ? `\nJob Description:\n${jobDescription.substring(0, 1500)}\n` : ''}
+
+TASK:
+Generate exactly 4-5 evaluation rubrics specifically tailored for the ${stageId.replace(/_/g, ' ')} stage.
+
+REQUIREMENTS FOR ${stageId.toUpperCase()}:
+${getStageRequirements(stageId, designation)}
+
+FORMAT:
+Return ONLY a valid JSON array with this exact structure:
+[
+  {
+    "name": "Rubric Name (3-5 words)",
+    "description": "Clear, specific description of what this rubric evaluates (15-25 words)",
+    "weight": number (percentage, all weights must sum to 100)
+  }
+]
+
+GUIDELINES:
+1. Each rubric must be SPECIFIC to ${stageId.replace(/_/g, ' ')} - don't use generic rubrics
+2. For ${designation}, focus on role-relevant competencies
+3. Rubric names should be concise and professional
+4. Descriptions must be actionable and measurable
+5. Weights should reflect importance (higher weight = more critical)
+6. All weights must sum to exactly 100
+
+EXAMPLE for audio_interview of "Senior Software Engineer":
+[
+  {
+    "name": "Technical Problem Solving",
+    "description": "Ability to break down complex technical problems and articulate solution approaches clearly",
+    "weight": 30
+  },
+  {
+    "name": "Communication Clarity",
+    "description": "Clear articulation of technical concepts with appropriate terminology and examples",
+    "weight": 25
+  }
+]
+
+Return ONLY the JSON array, no markdown, no explanation, no additional text.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -82,32 +131,68 @@ export const chatWithAI = async (req, res) => {
 
     // Build conversation context
     const conversationContext = chatHistory
+      .slice(-6) // Only last 6 messages for context
       .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
       .join('\n');
 
-    const prompt = `You are an expert HR consultant helping to customize evaluation rubrics for the "${stageId.replace(/_/g, ' ')}" stage of hiring for a "${designation}" position.
+    const stageContext = getStageContext(stageId);
+    const stageRequirements = getStageRequirements(stageId, designation);
 
-Current rubrics:
+    const prompt = `You are an expert HR consultant and technical interviewer helping customize evaluation rubrics for the "${stageId.replace(/_/g, ' ')}" stage.
+
+CONTEXT:
+- Position: ${designation}
+- Interview Stage: ${stageId.replace(/_/g, ' ')}
+- Stage Purpose: ${stageContext}
+
+STAGE-SPECIFIC REQUIREMENTS:
+${stageRequirements}
+
+CURRENT RUBRICS:
 ${JSON.stringify(currentRubrics, null, 2)}
 
-Previous conversation:
+CONVERSATION HISTORY:
 ${conversationContext}
 
-User request: ${message}
+USER REQUEST:
+${message}
 
-Based on the user's request, provide:
-1. A conversational response explaining what changes you're making
-2. Updated rubrics array (if applicable)
-3. If the user asks to generate interview questions, provide 10 relevant questions
+TASK:
+Respond to the user's request while maintaining stage-appropriate rubrics.
 
-Format your response as JSON with these fields:
+CRITICAL RULES:
+1. For ${stageId.replace(/_/g, ' ')}, rubrics must align with stage requirements above
+2. If user asks to add/modify rubrics, ensure they fit the stage context
+3. If user asks for questions (audio_interview only), generate 10 AUDIO-appropriate questions
+4. Maintain professional, conversational tone
+5. If request doesn't fit the stage, politely explain and suggest alternatives
+
+RESPONSE FORMAT:
+Return ONLY a valid JSON object with this structure:
 {
-  "message": "your conversational response",
+  "message": "Conversational response explaining changes (2-3 sentences)",
   "updatedRubrics": [...] or null,
   "questions": [...] or null
 }
 
-Only return the JSON object, no additional text.`;
+For updatedRubrics, use format:
+[
+  {
+    "name": "Rubric Name",
+    "description": "Clear description",
+    "weight": number
+  }
+]
+
+For questions (audio_interview ONLY), use format:
+[
+  {
+    "question": "Question text suitable for verbal conversation",
+    "rubricId": "matching rubric name"
+  }
+]
+
+Return ONLY the JSON object, no markdown, no additional text.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -172,17 +257,64 @@ export const generateQuestions = async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
-    const prompt = `You are an expert HR consultant. Generate 10 interview questions for the "${stageId.replace(/_/g, ' ')}" stage of hiring for a "${designation}" position.
+    // Enhanced prompt for audio interview questions
+    const prompt = `You are an expert technical interviewer with deep experience in conducting ${stageId.replace(/_/g, ' ')} for ${designation} positions.
 
-Job Description: ${jobDescription || 'Not provided'}
+CONTEXT:
+- Position: ${designation}
+- Interview Stage: ${stageId.replace(/_/g, ' ')}
+- Interview Format: Audio/Phone conversation (30-45 minutes)
+${jobDescription ? `\nJob Description Summary:\n${jobDescription.substring(0, 1000)}\n` : ''}
 
-Evaluation Rubrics:
-${rubrics.map((r, i) => `${i + 1}. ${r.name}: ${r.description}`).join('\n')}
+EVALUATION RUBRICS (These are what we're assessing):
+${rubrics.map((r, i) => `${i + 1}. ${r.name} (${r.weight}%): ${r.description}`).join('\n')}
 
-Generate 10 thoughtful interview questions that map to these rubrics. Each question should help evaluate one or more of the rubrics.
+TASK:
+Generate exactly 10 interview questions specifically designed for an AUDIO interview for ${designation}.
 
-Format your response as a JSON array with objects containing: question, rubricId (use the rubric name).
-Only return the JSON array, no additional text.`;
+CRITICAL REQUIREMENTS FOR AUDIO INTERVIEW QUESTIONS:
+1. Questions must be answerable VERBALLY (no coding, no whiteboard, no screen sharing)
+2. Focus on past experiences, problem-solving approaches, and technical thinking
+3. Use "Tell me about...", "Describe a time when...", "How would you..." formats
+4. Each question should take 3-5 minutes to answer thoroughly
+5. Questions should reveal depth of knowledge through conversation
+6. Mix behavioral (STAR format) and technical discussion questions
+7. Questions must map directly to the rubrics above
+
+AVOID:
+- Questions requiring code writing
+- Questions needing diagrams or visual aids
+- Yes/No questions
+- Questions too broad or too narrow
+- Generic questions that don't relate to ${designation}
+
+DISTRIBUTION:
+- Ensure questions cover ALL rubrics proportionally to their weights
+- Higher weight rubrics should have more questions
+
+FORMAT:
+Return ONLY a valid JSON array with this exact structure:
+[
+  {
+    "question": "Full question text that is clear and specific for audio conversation",
+    "rubricId": "${rubrics[0]?.name || 'rubric-name'}"
+  }
+]
+
+EXAMPLE for "Senior Software Engineer" audio interview:
+[
+  {
+    "question": "Tell me about a time when you had to optimize a critical piece of code that was causing performance issues. Walk me through your approach to identifying the bottleneck and how you resolved it.",
+    "rubricId": "Technical Problem Solving"
+  },
+  {
+    "question": "Describe your experience with system design. Can you walk me through how you would architect a URL shortening service like bit.ly, explaining your technical decisions?",
+    "rubricId": "Technical Depth"
+  }
+]
+
+Generate 10 questions NOW. Return ONLY the JSON array, no markdown, no explanation.`;
+
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -242,7 +374,7 @@ export const analyzeJobDescription = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const prompt = `Analyze this job description for a "${designation}" position and extract key insights:
 
@@ -291,6 +423,62 @@ Only return the JSON object, no additional text.`;
   }
 };
 
+// Helper function to get stage context
+function getStageContext(stageId) {
+  const contexts = {
+    resume_screening: 'Initial screening to filter candidates based on resume/CV before any interviews. This is a paper-based evaluation to shortlist candidates.',
+    audio_interview: 'First verbal interaction with candidate via phone/video call (30-45 min). Focus on communication, cultural fit, and technical discussion without coding. This is NOT a coding round.',
+    assignment: 'Take-home technical assignment to evaluate practical coding skills, problem-solving, and code quality. Candidates submit code for review.',
+    personal_interview: 'In-depth face-to-face/video interview (60-90 min) with potential team members. Deep dive into experience, projects, and technical expertise.',
+    founders_round: 'Final interview with company founders/C-level executives. Focus on vision alignment, leadership potential, and cultural impact.',
+  };
+  return contexts[stageId] || 'Evaluation stage in the hiring process';
+}
+
+// Helper function to get stage-specific requirements
+function getStageRequirements(stageId, designation) {
+  const requirements = {
+    resume_screening: `- Focus on resume/CV screening criteria ONLY
+- Evaluate quantifiable achievements, not potential
+- Check technical skills match against job requirements
+- Assess experience relevance and career progression
+- Consider education and certifications
+- NO interview-based criteria (communication, personality, etc.)`,
+    
+    audio_interview: `- This is a PHONE/VIDEO conversation (NO coding, NO screen sharing)
+- Evaluate verbal communication and articulation skills
+- Assess technical depth through DISCUSSION, not coding
+- Gauge cultural fit and motivation through conversation
+- Check problem-solving APPROACH, not code implementation
+- For ${designation}, focus on role-specific technical discussions
+- Questions should be answerable verbally in 3-5 minutes
+- NO whiteboard, NO live coding, NO assignments`,
+    
+    assignment: `- Evaluate actual CODE submitted by candidate
+- Focus on code quality, structure, and best practices
+- Check problem-solving through working solution
+- Assess testing, documentation, and edge case handling
+- For ${designation}, check role-specific technical implementation
+- Review Git practices, commit messages, and code organization`,
+    
+    personal_interview: `- Deep technical discussion with potential team members
+- Evaluate past project experiences in detail
+- Assess collaboration and leadership capabilities
+- Check growth mindset and learning attitude
+- For ${designation}, verify hands-on expertise and technical depth
+- Can include whiteboard discussions and architecture design`,
+    
+    founders_round: `- Evaluate strategic thinking and business acumen
+- Assess alignment with company vision and culture
+- Check leadership potential for future growth
+- For ${designation}, verify how they can drive impact
+- Focus on long-term value and cultural contribution
+- Understand career motivations and aspirations`,
+  };
+  
+  return requirements[stageId] || 'Standard evaluation criteria for this stage';
+}
+
 // Helper function to get default rubrics
 function getDefaultRubricsForStage(stageId, designation) {
   const defaultRubrics = {
@@ -323,27 +511,27 @@ function getDefaultRubricsForStage(stageId, designation) {
     audio_interview: [
       {
         id: `${stageId}-${Date.now()}-1`,
-        name: 'Communication Skills',
-        description: 'Clarity, articulation, and professional communication',
-        weight: 20,
-      },
-      {
-        id: `${stageId}-${Date.now()}-2`,
-        name: 'Technical Depth',
-        description: 'Deep understanding of technical concepts and problem-solving approach',
+        name: 'Technical Discussion Ability',
+        description: 'Ability to explain technical concepts, architectures, and past work clearly through verbal conversation without code',
         weight: 30,
       },
       {
+        id: `${stageId}-${Date.now()}-2`,
+        name: 'Communication & Articulation',
+        description: 'Clear verbal expression of ideas, active listening, asking clarifying questions, and professional phone/video presence',
+        weight: 25,
+      },
+      {
         id: `${stageId}-${Date.now()}-3`,
-        name: 'Cultural Fit',
-        description: 'Alignment with company values and team dynamics',
+        name: 'Problem-Solving Approach',
+        description: 'Structured thinking process when discussing technical challenges, ability to explain trade-offs and decision-making rationale',
         weight: 25,
       },
       {
         id: `${stageId}-${Date.now()}-4`,
-        name: 'Motivation & Interest',
-        description: 'Genuine interest in the role and long-term career goals',
-        weight: 25,
+        name: 'Role Alignment & Motivation',
+        description: 'Understanding of role requirements, genuine interest in the position, and alignment with career goals',
+        weight: 20,
       },
     ],
   };
@@ -351,14 +539,70 @@ function getDefaultRubricsForStage(stageId, designation) {
   return defaultRubrics[stageId] || [];
 }
 
-// Helper function to get default questions
+// Helper function to get default questions (audio interview specific)
 function getDefaultQuestionsForStage(stageId, rubrics) {
+  if (stageId === 'audio_interview') {
+    return [
+      { 
+        id: `q-${Date.now()}-1`, 
+        question: 'Tell me about a complex technical project you worked on recently. Walk me through the architecture and your specific contributions to the solution.',
+        rubricId: rubrics[0]?.id 
+      },
+      { 
+        id: `q-${Date.now()}-2`, 
+        question: 'Describe a time when you had to explain a technical concept or design decision to non-technical stakeholders. How did you approach it and what was the outcome?',
+        rubricId: rubrics[1]?.id 
+      },
+      { 
+        id: `q-${Date.now()}-3`, 
+        question: 'Can you walk me through your problem-solving approach when you encounter a challenging technical issue? Give me a specific example from your recent work.',
+        rubricId: rubrics[2]?.id 
+      },
+      { 
+        id: `q-${Date.now()}-4`, 
+        question: 'Tell me about a technical decision you made that you later realized wasn\'t optimal. How did you identify the issue and what did you learn from it?',
+        rubricId: rubrics[2]?.id 
+      },
+      { 
+        id: `q-${Date.now()}-5`, 
+        question: 'Describe your experience with system design. If you were to design a scalable notification service, what would be your high-level approach and key considerations?',
+        rubricId: rubrics[0]?.id 
+      },
+      { 
+        id: `q-${Date.now()}-6`, 
+        question: 'What interests you most about this position, and how does it align with your career goals and technical growth aspirations?',
+        rubricId: rubrics[3]?.id 
+      },
+      { 
+        id: `q-${Date.now()}-7`, 
+        question: 'Tell me about a time when you had to quickly learn a new technology or framework for a project. How did you approach the learning process?',
+        rubricId: rubrics[0]?.id 
+      },
+      { 
+        id: `q-${Date.now()}-8`, 
+        question: 'Describe a situation where you had to debug a critical production issue. Walk me through your debugging process and how you identified the root cause.',
+        rubricId: rubrics[2]?.id 
+      },
+      { 
+        id: `q-${Date.now()}-9`, 
+        question: 'How do you stay current with technology trends and best practices in your field? Can you give me an example of something you\'ve recently learned and applied?',
+        rubricId: rubrics[0]?.id 
+      },
+      { 
+        id: `q-${Date.now()}-10`, 
+        question: 'Tell me about a time when you had to make a trade-off between code quality and meeting a deadline. How did you approach this decision and what was the outcome?',
+        rubricId: rubrics[2]?.id 
+      },
+    ];
+  }
+  
+  // Generic fallback for other stages
   return [
-    { id: `q-${Date.now()}-1`, question: 'Can you describe a recent project where you demonstrated strong technical skills?', rubricId: rubrics[0]?.id },
-    { id: `q-${Date.now()}-2`, question: 'How do you approach communicating complex technical concepts to non-technical stakeholders?', rubricId: rubrics[0]?.id },
-    { id: `q-${Date.now()}-3`, question: 'What motivates you about this role and our company?', rubricId: rubrics[1]?.id },
-    { id: `q-${Date.now()}-4`, question: 'Describe a time when you had to adapt to a significant change in your work environment.', rubricId: rubrics[2]?.id },
-    { id: `q-${Date.now()}-5`, question: 'How do you stay updated with the latest technologies in your field?', rubricId: rubrics[0]?.id },
+    { id: `q-${Date.now()}-1`, question: 'Can you describe a recent project where you demonstrated strong skills relevant to this role?', rubricId: rubrics[0]?.id },
+    { id: `q-${Date.now()}-2`, question: 'How do you approach communicating complex ideas to different audiences?', rubricId: rubrics[1]?.id },
+    { id: `q-${Date.now()}-3`, question: 'What motivates you about this role and our company?', rubricId: rubrics[2]?.id },
+    { id: `q-${Date.now()}-4`, question: 'Describe a time when you had to adapt to a significant change in your work environment.', rubricId: rubrics[3]?.id },
+    { id: `q-${Date.now()}-5`, question: 'How do you stay updated with developments in your field?', rubricId: rubrics[0]?.id },
     { id: `q-${Date.now()}-6`, question: 'Tell me about a challenging problem you solved recently and your approach.', rubricId: rubrics[1]?.id },
     { id: `q-${Date.now()}-7`, question: 'How do you handle disagreements with team members?', rubricId: rubrics[2]?.id },
     { id: `q-${Date.now()}-8`, question: 'What are your long-term career goals?', rubricId: rubrics[3]?.id },

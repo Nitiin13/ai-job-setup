@@ -1,342 +1,410 @@
-# AI-Powered Job Setup Application (MERN Stack)
+# Job Setup Application - AI-Powered Hiring Workflow Management
 
-A comprehensive mono-repo application for creating and managing AI-powered hiring pipelines. The system integrates with Google Gemini AI to generate intelligent evaluation rubrics and interview questions, stores job descriptions in AWS S3, and maintains all data in MongoDB.
+A comprehensive MERN stack mono-repo application that integrates with Gemini AI for intelligent hiring workflow management. Create job postings, configure multi-stage interview processes, and leverage AI to generate evaluation rubrics and interview questions.
 
-## 🎯 Features
+## Features
 
-### Frontend (React + TypeScript + Tailwind CSS)
-- **Multi-step Wizard Interface**: Intuitive 4-step process for job configuration
-- **PDF Upload & Validation**: Drag-and-drop PDF upload with real-time validation
-- **Stage Selection**: Choose from 6 hiring stages with mandatory locked stages
-- **AI-Powered Rubric Generation**: Chat interface to customize evaluation criteria
-- **Question Generation**: Automatic generation of 10 interview questions
-- **Real-time Preview**: Live JSON configuration preview
-- **Export Functionality**: Download configuration as JSON
+- 📄 **PDF Job Description Upload** - Upload and parse job descriptions with S3 storage
+- 🎯 **Multi-Stage Interview Pipeline** - Configure resume screening, audio interview, assignment, personal interview, and founders round
+- 🤖 **Gemini AI Integration** - AI-suggested evaluation rubrics and interview questions
+- 💬 **Interactive Chat Interface** - Customize rubrics and questions through conversational AI
+- 🎨 **Drag & Drop Reordering** - Reorder interview stages and questions (with locked positions for mandatory stages)
+- ✏️ **Individual Editing** - Edit rubrics and questions inline
+- 📊 **MongoDB Storage** - Structured JSON format for all job setup data
 
-### Backend (Node.js + Express + MongoDB)
-- **RESTful API**: Complete CRUD operations for job management
-- **AWS S3 Integration**: Secure PDF storage and retrieval
-- **PDF Text Extraction**: Validates and extracts text from uploaded PDFs
-- **Gemini AI Integration**: Intelligent rubric and question generation
-- **Chat History Persistence**: Stores all AI conversations for future reference
-- **MongoDB Storage**: Structured data storage with indexes
+## Tech Stack
 
-## 🏗️ Architecture
+### Frontend
+- React with TypeScript
+- Tailwind CSS
+- Lucide React (icons)
+- Native HTML5 Drag & Drop
 
-```
-job-setup-app/
-├── src/                          # Frontend (React)
-│   ├── components/
-│   │   ├── JobSetupWizard.tsx
-│   │   ├── JobDetailsStep.tsx
-│   │   ├── StageSelectionStep.tsx
-│   │   ├── RubricConfigurationStep.tsx
-│   │   ├── AIRubricChat.tsx
-│   │   └── ReviewStep.tsx
-│   ├── services/
-│   │   └── api.ts                # API service layer
-│   ├── types/
-│   │   └── job-setup.ts          # TypeScript interfaces
-│   └── App.tsx
-│
-└── server/                        # Backend (Express)
-    ├── controllers/
-    │   ├── jobController.js      # Job CRUD operations
-    │   └── aiController.js       # AI operations
-    ├── models/
-    │   └── Job.js                # MongoDB schema
-    ├── routes/
-    │   ├── jobRoutes.js
-    │   └── aiRoutes.js
-    ├── utils/
-    │   ├── s3Utils.js            # AWS S3 operations
-    │   └── pdfUtils.js           # PDF processing
-    ├── middleware/
-    │   ├── errorHandler.js
-    │   └── validateRequest.js
-    └── server.js                 # Express app entry
-```
+### Backend
+- Node.js + Express.js
+- MongoDB (Mongoose)
+- AWS S3 (file storage)
+- Google Gemini AI (gemini-2.0-flash-exp)
 
-## 🚀 Getting Started
+## Prerequisites
 
-### Prerequisites
+Before deploying, ensure you have:
 
-- Node.js 18+
-- MongoDB (local or Atlas)
-- AWS Account with S3
-- Google Gemini API key
+1. **Vercel Account** - [Sign up here](https://vercel.com)
+2. **MongoDB Atlas Account** - [Sign up here](https://www.mongodb.com/cloud/atlas)
+3. **AWS Account** - [Sign up here](https://aws.amazon.com)
+4. **Google Cloud Account** - [Sign up here](https://console.cloud.google.com)
+5. **Git** installed locally
+6. **Node.js** (v18 or higher) installed
 
-### Installation
+## Setup Instructions
 
-1. **Clone the repository**
+### 1. Clone and Setup Repository
+
 ```bash
-git clone <repository-url>
-cd job-setup-app
-```
+# Clone your repository
+git clone <your-repo-url>
+cd <your-repo-name>
 
-2. **Setup Frontend**
-```bash
-# Install frontend dependencies
+# Install dependencies for frontend
 npm install
 
-# Create frontend .env file
-cp .env.example .env
-
-# Update VITE_API_URL in .env
-# VITE_API_URL=http://localhost:5000/api
-```
-
-3. **Setup Backend**
-```bash
-# Navigate to server directory
+# Install dependencies for backend
 cd server
-
-# Install backend dependencies
 npm install
-
-# Create backend .env file
-cp .env.example .env
-
-# Update .env with your credentials:
-# - MONGODB_URI
-# - AWS credentials (ACCESS_KEY_ID, SECRET_ACCESS_KEY, REGION, BUCKET_NAME)
-# - GEMINI_API_KEY
+cd ..
 ```
 
-4. **Configure AWS S3**
+### 2. MongoDB Atlas Setup
+
+1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+2. Create a new cluster (free tier available)
+3. Click **"Connect"** → **"Connect your application"**
+4. Copy the connection string (format: `mongodb+srv://<username>:<password>@cluster.mongodb.net/<dbname>`)
+5. Replace `<password>` with your database password
+6. Replace `<dbname>` with your preferred database name (e.g., `job-setup-db`)
+
+### 3. AWS S3 Setup
+
+1. Go to [AWS Console](https://console.aws.amazon.com)
+2. Navigate to **S3** → **Create bucket**
+3. Bucket name: `job-setup-pdfs-<unique-id>` (must be globally unique)
+4. Region: Choose closest to your users (e.g., `us-east-1`)
+5. **Block Public Access**: Keep all blocked (we'll use signed URLs)
+6. Click **"Create bucket"**
+
+#### Create IAM User for S3 Access
+
+1. Go to **IAM** → **Users** → **Create user**
+2. User name: `job-setup-s3-user`
+3. Attach policy: **AmazonS3FullAccess** (or create a custom policy with specific bucket access)
+4. Create user and go to **Security credentials**
+5. Click **"Create access key"** → Choose **"Application running outside AWS"**
+6. Copy **Access Key ID** and **Secret Access Key** (save these securely!)
+
+### 4. Google Gemini AI Setup
+
+1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Click **"Get API Key"** → **"Create API key in new project"**
+3. Copy the generated API key (starts with `AIza...`)
+
+### 5. Environment Variables Setup
+
+Create `.env` file in the `/server` directory:
+
 ```bash
-# Create an S3 bucket
-aws s3 mb s3://job-setup-bucket
+# Server Configuration
+PORT=5000
+NODE_ENV=production
 
-# Update bucket name in server/.env
-S3_BUCKET_NAME=job-setup-bucket
+# MongoDB
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/job-setup-db?retryWrites=true&w=majority
+
+# AWS S3
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_REGION=us-east-1
+AWS_S3_BUCKET_NAME=job-setup-pdfs-<unique-id>
+
+# Google Gemini AI
+GEMINI_API_KEY=your_gemini_api_key
+
+# CORS (Update with your frontend URL after deployment)
+CORS_ORIGIN=https://your-app.vercel.app
 ```
 
-5. **Setup MongoDB**
+Create `.env` file in the **root directory** (frontend):
 
-**Option A: Local MongoDB**
 ```bash
-# Start MongoDB
-mongod
-
-# Connection string:
-# mongodb://localhost:27017/job-setup-app
+# Backend API URL (Update after deploying backend)
+VITE_API_URL=https://your-backend-url.com/api
 ```
 
-**Option B: MongoDB Atlas**
-1. Create cluster at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-2. Get connection string
-3. Update `MONGODB_URI` in `server/.env`
+## Deployment Steps
 
-6. **Get Gemini API Key**
-1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Create new API key
-3. Add to `server/.env` as `GEMINI_API_KEY`
+### Option 1: Deploy Both Frontend & Backend on Vercel
 
-### Running the Application
+#### Step 1: Deploy Backend as Serverless Functions
 
-1. **Start Backend Server**
-```bash
-cd server
-npm run dev
-# Server runs on http://localhost:5000
-```
+1. Create `vercel.json` in the **root directory**:
 
-2. **Start Frontend** (in new terminal)
-```bash
-npm run dev
-# Frontend runs on http://localhost:5173
-```
-
-## 📋 How It Works
-
-### Step 1: Job Details
-1. Enter job designation (e.g., "Senior Software Engineer")
-2. Upload job description PDF
-3. System validates PDF is parsable to text
-4. PDF uploads to S3 and text is extracted
-
-### Step 2: Stage Selection
-- **Locked Stages** (mandatory):
-  - Resume Screening
-  - Rejected
-- **Optional Stages** (select as needed):
-  - Audio Interview
-  - Assignment
-  - Personal Interview
-  - Founders Round
-
-### Step 3: Configure Rubrics
-For each selected stage:
-1. AI suggests evaluation rubrics based on job description
-2. Chat with AI to customize rubrics:
-   - Add new rubrics
-   - Modify existing ones
-   - Remove irrelevant criteria
-   - Adjust weights
-3. For Audio Interview: Generate 10 interview questions
-4. All chat history is saved
-
-### Step 4: Review & Submit
-- Preview complete JSON configuration
-- Copy or download configuration
-- Submit to MongoDB
-- PDF stored in S3, metadata in database
-
-## 📊 Data Structure
-
-### Final JSON Output
 ```json
 {
-  "designation": "Senior Software Engineer",
-  "job_description": {
-    "file_name": "job-description.pdf",
-    "s3_url": "https://...",
-    "parsed_text": "..."
-  },
-  "stages": {
-    "resume_screening": {
-      "enabled": true,
-      "locked": true,
-      "evaluation_rubrics": [
-        {
-          "name": "Quantifiable Achievements",
-          "description": "...",
-          "weight": 25
-        }
-      ],
-      "chat_history": [...]
-    },
-    "audio_interview": {
-      "enabled": true,
-      "evaluation_rubrics": [...],
-      "questions": [
-        {
-          "question": "...",
-          "rubric_id": "..."
-        }
-      ],
-      "chat_history": [...]
+  "version": 2,
+  "builds": [
+    {
+      "src": "server/index.js",
+      "use": "@vercel/node"
     }
-  }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "server/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ]
 }
 ```
 
-## 🔌 API Endpoints
+2. Update `server/index.js` to export the Express app:
 
-### Job Management
-- `POST /api/jobs` - Create job
-- `GET /api/jobs` - List jobs
-- `GET /api/jobs/:id` - Get job by ID
-- `PUT /api/jobs/:id` - Update job
-- `DELETE /api/jobs/:id` - Delete job
-- `POST /api/jobs/upload-pdf` - Upload PDF
+```javascript
+// At the end of server/index.js
+module.exports = app;
+```
 
-### AI Operations
-- `POST /api/ai/generate-rubrics` - Generate evaluation rubrics
-- `POST /api/ai/chat` - Chat with AI to modify rubrics
-- `POST /api/ai/generate-questions` - Generate interview questions
-- `POST /api/ai/analyze-job-description` - Analyze JD
+#### Step 2: Deploy to Vercel
 
-## 🧪 Testing
-
-### Test PDF Upload
+1. **Install Vercel CLI** (optional but recommended):
 ```bash
-curl -X POST http://localhost:5000/api/jobs/upload-pdf \
-  -F "pdf=@job-description.pdf"
+npm install -g vercel
 ```
 
-### Test Rubric Generation
+2. **Login to Vercel**:
 ```bash
-curl -X POST http://localhost:5000/api/ai/generate-rubrics \
-  -H "Content-Type: application/json" \
-  -d '{
-    "stageId": "resume_screening",
-    "designation": "Senior Software Engineer",
-    "jobDescription": "..."
-  }'
+vercel login
 ```
 
-## 🔒 Environment Variables
-
-### Frontend (.env)
-```env
-VITE_API_URL=http://localhost:5000/api
+3. **Deploy**:
+```bash
+vercel
 ```
 
-### Backend (server/.env)
-```env
-PORT=5000
-MONGODB_URI=mongodb://localhost:27017/job-setup-app
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-AWS_REGION=us-east-1
-S3_BUCKET_NAME=job-setup-bucket
-GEMINI_API_KEY=your_gemini_key
+4. Follow the prompts:
+   - **Set up and deploy?** Yes
+   - **Which scope?** Select your account
+   - **Link to existing project?** No
+   - **Project name?** job-setup-app (or your preferred name)
+   - **Directory?** ./ (root)
+   - **Override settings?** No
+
+5. **Add Environment Variables** in Vercel Dashboard:
+   - Go to your project → **Settings** → **Environment Variables**
+   - Add all variables from your `.env` files:
+     - `MONGODB_URI`
+     - `AWS_ACCESS_KEY_ID`
+     - `AWS_SECRET_ACCESS_KEY`
+     - `AWS_REGION`
+     - `AWS_S3_BUCKET_NAME`
+     - `GEMINI_API_KEY`
+     - `CORS_ORIGIN` (set to your Vercel frontend URL)
+     - `VITE_API_URL` (set to your Vercel deployment URL + `/api`)
+
+6. **Redeploy** after adding environment variables:
+```bash
+vercel --prod
 ```
 
-## 📦 Tech Stack
+### Option 2: Deploy Frontend on Vercel, Backend Elsewhere
 
-### Frontend
-- **React 18** - UI framework
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Styling
-- **Lucide Icons** - Icon library
-- **Vite** - Build tool
+If you prefer to deploy the backend separately (recommended for complex APIs):
 
-### Backend
-- **Node.js** - Runtime
-- **Express** - Web framework
-- **MongoDB** - Database
-- **Mongoose** - ODM
-- **AWS SDK v3** - S3 integration
-- **pdf-parse** - PDF text extraction
-- **@google/generative-ai** - Gemini AI
-- **Multer** - File uploads
+#### Backend Deployment Options:
+- **Railway** - [railway.app](https://railway.app)
+- **Render** - [render.com](https://render.com)
+- **Heroku** - [heroku.com](https://heroku.com)
+- **AWS EC2/Elastic Beanstalk**
+- **DigitalOcean App Platform**
 
-## 🎨 Key Features Explained
+#### Frontend Deployment on Vercel:
 
-### PDF Validation
-- Checks file type is PDF
-- Uploads to S3
-- Extracts text using pdf-parse
-- Validates text extraction quality
-- Rejects scanned/image-only PDFs
+1. Create a new repository **only for frontend** or use Vercel's monorepo support
 
-### AI Integration
-- Uses Gemini Pro model
-- Context-aware conversations
-- Structured JSON responses
-- Fallback to default values
-- Conversation history persistence
+2. **Deploy via Vercel Dashboard**:
+   - Go to [Vercel Dashboard](https://vercel.com/dashboard)
+   - Click **"Add New Project"**
+   - Import your Git repository
+   - **Framework Preset**: Vite
+   - **Root Directory**: ./ (or leave empty if frontend is in root)
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
 
-### Stage Management
-- Locked mandatory stages
-- Dynamic stage selection
-- Per-stage rubric configuration
-- Independent chat history per stage
+3. **Add Environment Variables**:
+   - `VITE_API_URL`: Your backend URL (e.g., `https://your-backend.railway.app/api`)
 
-## 🚧 Future Enhancements
+4. Click **"Deploy"**
 
-- [ ] Authentication & Authorization (JWT)
-- [ ] Role-based access control
-- [ ] Candidate application tracking
-- [ ] Real-time collaboration (WebSockets)
-- [ ] Email notifications
-- [ ] Dashboard analytics
-- [ ] Bulk job creation
-- [ ] Template management
-- [ ] Interview scheduling
-- [ ] Automated scoring
+### Step 3: Configure CORS
 
-## 📄 License
+Update your backend's CORS configuration to allow requests from your Vercel frontend:
 
-ISC
+```javascript
+// server/index.js or server/app.js
+const cors = require('cors');
 
-## 🤝 Contributing
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'https://your-app.vercel.app',
+  credentials: true
+}));
+```
 
-Contributions welcome! Please read contributing guidelines first.
+### Step 4: Verify Deployment
 
-## 📧 Support
+1. **Frontend**: Visit your Vercel URL (e.g., `https://your-app.vercel.app`)
+2. **Backend Health Check**: Visit `https://your-backend-url/api/health`
+3. **Test Features**:
+   - Upload a PDF job description
+   - Select interview stages
+   - Configure rubrics with AI chat
+   - Generate interview questions
+   - Test drag & drop functionality
 
-For issues and questions, please open a GitHub issue.
+## Project Structure
+
+```
+job-setup-app/
+├── components/              # React components
+│   ├── AIRubricChat.tsx    # AI chat interface for rubrics & questions
+│   ├── StageSelectionStep.tsx  # Stage selection with drag & drop
+│   ├── JobDescriptionStep.tsx  # PDF upload
+│   └── ReviewStep.tsx      # Final review
+├── server/                 # Backend API
+│   ├── controllers/
+│   │   ├── aiController.js     # Gemini AI integration
+│   │   ├── jobController.js    # Job CRUD operations
+│   │   └── uploadController.js # PDF upload & S3
+│   ├── models/
+│   │   └── Job.js          # MongoDB schema
+│   ├── routes/
+│   │   ├── aiRoutes.js
+│   │   ├── jobRoutes.js
+│   │   └── uploadRoutes.js
+│   ├── utils/
+│   │   └── s3Utils.js      # AWS S3 utilities
+│   └── index.js            # Express server
+├── services/
+│   └── api.ts              # Frontend API client
+├── types/
+│   └── job-setup.ts        # TypeScript interfaces
+├── .env                    # Frontend environment variables
+├── server/.env             # Backend environment variables
+├── .gitignore
+├── package.json
+├── vercel.json             # Vercel configuration
+└── README.md
+```
+
+## Environment Variables Reference
+
+### Backend (.env in /server)
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `PORT` | Server port | `5000` |
+| `NODE_ENV` | Environment | `production` |
+| `MONGODB_URI` | MongoDB connection string | `mongodb+srv://user:pass@cluster.mongodb.net/db` |
+| `AWS_ACCESS_KEY_ID` | AWS access key | `AKIA...` |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key | `abc123...` |
+| `AWS_REGION` | AWS region | `us-east-1` |
+| `AWS_S3_BUCKET_NAME` | S3 bucket name | `job-setup-pdfs-12345` |
+| `GEMINI_API_KEY` | Google Gemini API key | `AIza...` |
+| `CORS_ORIGIN` | Allowed frontend origin | `https://your-app.vercel.app` |
+
+### Frontend (.env in root)
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VITE_API_URL` | Backend API URL | `https://your-backend.com/api` |
+
+## Troubleshooting
+
+### Build Failures
+
+**Issue**: Build fails with module errors
+```bash
+# Clear cache and reinstall
+rm -rf node_modules package-lock.json
+npm install
+npm run build
+```
+
+### CORS Errors
+
+**Issue**: Frontend can't connect to backend
+- Ensure `CORS_ORIGIN` in backend matches your Vercel frontend URL
+- Check that backend is deployed and accessible
+- Verify `VITE_API_URL` in frontend environment variables
+
+### PDF Upload Failures
+
+**Issue**: PDF upload returns 500 error
+- Verify AWS credentials are correct
+- Check S3 bucket name matches environment variable
+- Ensure IAM user has S3 write permissions
+- Check bucket region matches `AWS_REGION`
+
+### MongoDB Connection Issues
+
+**Issue**: Database connection timeout
+- Verify MongoDB Atlas IP whitelist (add `0.0.0.0/0` for all IPs in production)
+- Check connection string format
+- Ensure database user has read/write permissions
+
+### Gemini AI Errors
+
+**Issue**: AI features not working
+- Verify API key is correct and active
+- Check Google Cloud project has Gemini API enabled
+- Monitor API quota limits
+
+## Security Best Practices
+
+1. **Never commit `.env` files** - Use `.env.example` templates instead
+2. **Rotate API keys** regularly
+3. **Use IAM roles** with minimal required permissions
+4. **Enable MongoDB IP whitelist** in production
+5. **Use HTTPS** for all API communications
+6. **Sanitize user inputs** before processing
+7. **Implement rate limiting** on API endpoints
+8. **Monitor AWS costs** and set billing alerts
+
+## Development
+
+### Local Development
+
+```bash
+# Terminal 1 - Frontend
+npm run dev
+
+# Terminal 2 - Backend
+cd server
+npm run dev
+```
+
+Frontend: `http://localhost:5173`  
+Backend: `http://localhost:5000`
+
+### Build for Production
+
+```bash
+# Frontend
+npm run build
+
+# Backend (if needed)
+cd server
+npm run build  # If you have a build script
+```
+
+## Support
+
+For issues and questions:
+- Check the troubleshooting section above
+- Review Vercel deployment logs
+- Check MongoDB Atlas monitoring
+- Review AWS CloudWatch logs (for S3 issues)
+
+## License
+
+[Your License Here]
+
+## Contributors
+
+[Your Name/Team]
+
+---
+
+**Last Updated**: November 26, 2025
