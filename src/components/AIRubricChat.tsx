@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Sparkles, Plus, Trash2, Edit2, Check, X, GripVertical } from 'lucide-react';
+import { Send, Sparkles, Edit2, Check, X, GripVertical, MessageCircle, Lightbulb, Trash2 } from 'lucide-react';
 import { JobSetupData, StageConfig, EvaluationRubric, ChatMessage } from '../types/job-setup';
 import { aiAPI } from '../services/api';
 
@@ -11,7 +11,6 @@ interface AIRubricChatProps {
   onBack: () => void;
   isLastStage: boolean;
 }
-
 interface DraggableQuestionProps {
   question: any;
   index: number;
@@ -126,17 +125,21 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
   const [editingRubricId, setEditingRubricId] = useState<string | null>(null);
   const [editedRubric, setEditedRubric] = useState<EvaluationRubric | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
-  const [editedQuestion, setEditedQuestion] = useState<{ id: string; question: string; rubricId: string } | null>(null);
+  const [editedQuestion, setEditedQuestion] = useState<any>(null);
   const [currentSubStep, setCurrentSubStep] = useState<'rubrics' | 'questions'>('rubrics');
   const [draggedQuestionIndex, setDraggedQuestionIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  const [needsClarification, setNeedsClarification] = useState(false);
+  const [clarificationPrompt, setClarificationPrompt] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize with AI suggestions on first load
+  // Initialize conversation
   useEffect(() => {
     if (stage.evaluationRubrics.length === 0 && stage.chatHistory.length === 0) {
       generateInitialRubrics();
     }
-    // Reset to rubrics step when stage changes
     setCurrentSubStep('rubrics');
   }, [stage.id]);
 
@@ -144,16 +147,48 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [stage.chatHistory]);
 
+  // Suggestion prompts for natural conversation
+  const getSuggestions = () => {
+    if (currentSubStep === 'rubrics') {
+      return [
+        "Can you add a rubric for leadership skills?",
+        "Make technical skills more important",
+        "Remove the least important rubric",
+        "Explain why these rubrics are chosen",
+        "What's missing from this evaluation?"
+      ];
+    } else {
+      return [
+        "Generate more questions about problem-solving",
+        "Make the questions more behavioral",
+        "Add questions about team collaboration",
+        "These questions seem too easy",
+        "Can you make question 3 more specific?"
+      ];
+    }
+  };
+
   const generateInitialRubrics = async () => {
     setIsLoading(true);
 
+    const initialMessage: ChatMessage = {
+      id: `msg-${Date.now()}-init`,
+      role: 'assistant',
+      content: `Hi! I'm here to help you set up evaluation criteria for the ${stage.name} stage. I'm analyzing the job description for ${jobData.designation} to create personalized rubrics. Give me just a moment...`,
+      timestamp: new Date(),
+    };
+
+    updateStage({
+      ...stage,
+      chatHistory: [initialMessage],
+    });
+
     try {
-      // Call backend API to generate rubrics using Gemini AI
       const result = await aiAPI.generateRubrics({
         stageId: stage.id,
         designation: jobData.designation,
         jobDescription: jobData.jobDescriptionPdf?.parsedText,
-        existingRubrics: stage.evaluationRubrics,
+        existingRubrics: [],
       });
 
       if (result.success) {
@@ -164,39 +199,39 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
           timestamp: new Date(),
         };
 
-        // Update stage with rubrics
-        const updatedStage = {
+        updateStage({
           ...stage,
           evaluationRubrics: result.data.rubrics,
-          chatHistory: [aiMessage],
-        };
+          chatHistory: [initialMessage, aiMessage],
+        });
 
-        updateStage(updatedStage);
-        setIsLoading(false);
+        if (result.data.needsClarification) {
+          setNeedsClarification(true);
+          setClarificationPrompt(result.data.clarificationQuestion);
+        }
       }
-    } catch (error: any) {
-      console.error('Error generating rubrics:', error);
+    } catch (error) {
+      console.error('Error:', error);
       
-      // Fallback to default rubrics
-      const rubrics = getDefaultRubricsForStage(stage.id, jobData.designation);
-      const aiMessage: ChatMessage = {
+      const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',
-        content: `I've prepared evaluation rubrics for ${stage.name}. You can ask me to modify these rubrics, add new ones, or remove any that don't fit your needs.`,
+        content: `I've prepared some standard evaluation rubrics for ${stage.name}. Feel free to chat with me to customize them - you can ask me to add, remove, or modify any rubric to better fit your needs.`,
         timestamp: new Date(),
       };
 
       updateStage({
         ...stage,
-        evaluationRubrics: rubrics,
-        chatHistory: [aiMessage],
+        evaluationRubrics: getDefaultRubricsForStage(stage.id),
+        chatHistory: [initialMessage, errorMessage],
       });
+    } finally {
       setIsLoading(false);
     }
   };
 
   const handleSendMessage = async () => {
-    if (!userMessage.trim()) return;
+    if (!userMessage.trim() || isLoading) return;
 
     const newUserMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -211,108 +246,134 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
     });
 
     setUserMessage('');
+    setShowSuggestions(false);
     setIsLoading(true);
+    setNeedsClarification(false);
 
     try {
-      // If in questions step, handle question modification requests
-      if (currentSubStep === 'questions' && stage.id === 'audio_interview') {
-        const lowerMessage = userMessage.toLowerCase();
-        
-        // Check if asking to regenerate questions
-        if (lowerMessage.includes('regenerate') || lowerMessage.includes('generate new') || lowerMessage.includes('different question')) {
-          const questionsResult = await aiAPI.generateQuestions({
-            stageId: stage.id,
-            designation: jobData.designation,
-            rubrics: stage.evaluationRubrics,
-            jobDescription: jobData.jobDescriptionPdf?.parsedText,
-          });
+      const result = await aiAPI.chatWithAI({
+        message: userMessage,
+        stageId: stage.id,
+        designation: jobData.designation,
+        currentRubrics: stage.evaluationRubrics,
+        currentQuestions: stage.questions || [],
+        chatHistory: stage.chatHistory,
+        context: currentSubStep,
+        jobDescription: jobData.jobDescriptionPdf?.parsedText,
+      });
 
-          if (questionsResult.success) {
-            const aiMessage: ChatMessage = {
-              id: `msg-${Date.now() + 1}`,
-              role: 'assistant',
-              content: "I've generated a new set of 10 interview questions based on your evaluation rubrics.",
-              timestamp: new Date(),
-            };
+      if (result.success) {
+        const aiMessage: ChatMessage = {
+          id: `msg-${Date.now() + 1}`,
+          role: 'assistant',
+          content: result.data.message,
+          timestamp: new Date(),
+        };
 
-            updateStage({
-              ...stage,
-              chatHistory: [...stage.chatHistory, newUserMessage, aiMessage],
-              questions: questionsResult.data.questions,
-            });
-            setIsLoading(false);
-            return;
-          }
+        const updates: any = {
+          chatHistory: [...stage.chatHistory, newUserMessage, aiMessage],
+        };
+
+        if (result.data.updatedRubrics) {
+          updates.evaluationRubrics = result.data.updatedRubrics;
         }
 
-        // Otherwise, use general chat for question modifications
-        const result = await aiAPI.chatWithAI({
-          message: userMessage,
-          stageId: stage.id,
-          designation: jobData.designation,
-          currentRubrics: stage.evaluationRubrics,
-          chatHistory: stage.chatHistory,
+        if (result.data.questions) {
+          updates.questions = result.data.questions;
+        }
+
+        updateStage({
+          ...stage,
+          ...updates,
         });
 
-        if (result.success) {
-          const aiMessage: ChatMessage = {
-            id: `msg-${Date.now() + 1}`,
-            role: 'assistant',
-            content: result.data.message,
-            timestamp: new Date(),
-          };
-
-          updateStage({
-            ...stage,
-            chatHistory: [...stage.chatHistory, newUserMessage, aiMessage],
-            questions: result.data.questions || stage.questions,
-          });
+        if (result.data.needsClarification) {
+          setNeedsClarification(true);
+          setClarificationPrompt(result.data.clarificationQuestion);
         }
-      } else {
-        // Handle rubric modifications
-        const result = await aiAPI.chatWithAI({
-          message: userMessage,
-          stageId: stage.id,
-          designation: jobData.designation,
-          currentRubrics: stage.evaluationRubrics,
-          chatHistory: stage.chatHistory,
-        });
 
-        if (result.success) {
-          const aiMessage: ChatMessage = {
-            id: `msg-${Date.now() + 1}`,
-            role: 'assistant',
-            content: result.data.message,
-            timestamp: new Date(),
-          };
-
-          updateStage({
-            ...stage,
-            chatHistory: [...stage.chatHistory, newUserMessage, aiMessage],
-            evaluationRubrics: result.data.updatedRubrics || stage.evaluationRubrics,
-            questions: result.data.questions || stage.questions,
-          });
-        }
+        // Briefly show suggestions after AI responds
+        setTimeout(() => setShowSuggestions(true), 1000);
       }
-    } catch (error: any) {
-      console.error('Error chatting with AI:', error);
+    } catch (error) {
+      console.error('Error:', error);
       
-      // Fallback response
-      const aiMessage: ChatMessage = {
+      const errorMessage: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
-        content: currentSubStep === 'questions'
-          ? "I understand you'd like to modify the questions. Could you please provide more specific details? I can help you regenerate questions or customize specific ones."
-          : "I understand you'd like to make changes. Could you please provide more specific details? I can help you add, modify, or remove rubrics.",
+        content: "I'm having trouble processing that. Could you rephrase your question or try a different request?",
         timestamp: new Date(),
       };
 
       updateStage({
         ...stage,
-        chatHistory: [...stage.chatHistory, newUserMessage, aiMessage],
+        chatHistory: [...stage.chatHistory, newUserMessage, errorMessage],
       });
     } finally {
       setIsLoading(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setUserMessage(suggestion);
+    inputRef.current?.focus();
+  };
+
+  const handleProceedToQuestions = async () => {
+    setIsLoading(true);
+    setCurrentSubStep('questions');
+
+    const transitionMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: `Great! Now let me generate interview questions based on these rubrics. I'll create questions that help you evaluate candidates effectively...`,
+      timestamp: new Date(),
+    };
+
+    updateStage({
+      ...stage,
+      chatHistory: [...stage.chatHistory, transitionMessage],
+    });
+
+    try {
+      const result = await aiAPI.generateQuestions({
+        stageId: stage.id,
+        designation: jobData.designation,
+        rubrics: stage.evaluationRubrics,
+        jobDescription: jobData.jobDescriptionPdf?.parsedText,
+      });
+
+      if (result.success) {
+        const aiMessage: ChatMessage = {
+          id: `msg-${Date.now() + 1}`,
+          role: 'assistant',
+          content: result.data.message,
+          timestamp: new Date(),
+        };
+
+        updateStage({
+          ...stage,
+          chatHistory: [...stage.chatHistory, transitionMessage, aiMessage],
+          questions: result.data.questions,
+        });
+      }
+    } catch (error) {
+      const errorMessage: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        content: "I've created interview questions for you. Feel free to ask me to modify any question or generate new ones!",
+        timestamp: new Date(),
+      };
+
+      updateStage({
+        ...stage,
+        chatHistory: [...stage.chatHistory, transitionMessage, errorMessage],
+        questions: getDefaultQuestionsForStage(stage.evaluationRubrics),
+      });
+    } finally {
+      setIsLoading(false);
+      setShowSuggestions(true);
     }
   };
 
@@ -326,6 +387,7 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
     });
   };
 
+  // Manual edit functions (kept for direct user edits)
   const removeRubric = (rubricId: string) => {
     updateStage({
       ...stage,
@@ -337,10 +399,18 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
     setEditingRubricId(rubric.id);
     setEditedRubric({ ...rubric });
   };
+  const moveQuestion = (dragIndex: number, hoverIndex: number) => {
+    if (!stage.questions) return;
+    
+    const draggedQuestion = stage.questions[dragIndex];
+    const newQuestions = [...stage.questions];
+    newQuestions.splice(dragIndex, 1);
+    newQuestions.splice(hoverIndex, 0, draggedQuestion);
 
-  const cancelEditingRubric = () => {
-    setEditingRubricId(null);
-    setEditedRubric(null);
+    updateStage({
+      ...stage,
+      questions: newQuestions,
+    });
   };
 
   const saveEditedRubric = () => {
@@ -365,14 +435,33 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
     });
   };
 
+  const removeQuestion = (questionId: string) => {
+    if (!stage.questions) return;
+    
+    updateStage({
+      ...stage,
+      questions: stage.questions.filter((q) => q.id !== questionId),
+    });
+  };
+
   const startEditingQuestion = (question: any) => {
     setEditingQuestionId(question.id);
     setEditedQuestion({ ...question });
   };
-
+  const cancelEditingRubric = () => {
+    setEditingRubricId(null);
+    setEditedRubric(null);
+  };
   const cancelEditingQuestion = () => {
     setEditingQuestionId(null);
     setEditedQuestion(null);
+  };
+  const updateEditedQuestionField = (field: string, value: any) => {
+    if (!editedQuestion) return;
+    setEditedQuestion({
+      ...editedQuestion,
+      [field]: value,
+    });
   };
 
   const saveEditedQuestion = () => {
@@ -389,243 +478,155 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
     setEditedQuestion(null);
   };
 
-  const removeQuestion = (questionId: string) => {
-    if (!stage.questions) return;
-    
-    updateStage({
-      ...stage,
-      questions: stage.questions.filter((q) => q.id !== questionId),
-    });
-  };
-
-  const updateEditedQuestionField = (field: string, value: any) => {
-    if (!editedQuestion) return;
-    setEditedQuestion({
-      ...editedQuestion,
-      [field]: value,
-    });
-  };
-
-  const moveQuestion = (dragIndex: number, hoverIndex: number) => {
-    if (!stage.questions) return;
-    
-    const draggedQuestion = stage.questions[dragIndex];
-    const newQuestions = [...stage.questions];
-    newQuestions.splice(dragIndex, 1);
-    newQuestions.splice(hoverIndex, 0, draggedQuestion);
-
-    updateStage({
-      ...stage,
-      questions: newQuestions,
-    });
-  };
-
-  const handleProceedToQuestions = async () => {
-    setIsLoading(true);
-    setCurrentSubStep('questions');
-
-    try {
-      const questionsResult = await aiAPI.generateQuestions({
-        stageId: stage.id,
-        designation: jobData.designation,
-        rubrics: stage.evaluationRubrics,
-        jobDescription: jobData.jobDescriptionPdf?.parsedText,
-      });
-
-      if (questionsResult.success) {
-        const questionsMessage: ChatMessage = {
-          id: `msg-${Date.now()}`,
-          role: 'assistant',
-          content: questionsResult.data.message,
-          timestamp: new Date(),
-        };
-
-        updateStage({
-          ...stage,
-          chatHistory: [...stage.chatHistory, questionsMessage],
-          questions: questionsResult.data.questions,
-        });
-      }
-    } catch (error) {
-      console.error('Error generating questions:', error);
-      
-      // Fallback to default questions
-      const defaultQuestions = getDefaultQuestionsForStage(stage.id, stage.evaluationRubrics);
-      const questionsMessage: ChatMessage = {
-        id: `msg-${Date.now()}`,
-        role: 'assistant',
-        content: "I've generated 10 interview questions based on your evaluation rubrics.",
-        timestamp: new Date(),
-      };
-
-      updateStage({
-        ...stage,
-        chatHistory: [...stage.chatHistory, questionsMessage],
-        questions: defaultQuestions,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleBackToRubrics = () => {
-    setCurrentSubStep('rubrics');
-  };
-
   const canProceed = stage.evaluationRubrics.length > 0;
   const canProceedToNext = stage.id === 'audio_interview' 
     ? (currentSubStep === 'questions' && stage.questions && stage.questions.length > 0)
     : canProceed;
 
-  // Determine if button should be enabled
-  const isButtonEnabled = stage.id === 'audio_interview'
-    ? (currentSubStep === 'rubrics' ? canProceed : canProceedToNext)
-    : canProceed;
-
   return (
     <div className="space-y-4">
-      {/* Sub-step indicator for audio interview */}
+      {/* Progress indicator for audio interview */}
       {stage.id === 'audio_interview' && (
-        <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
           <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
               currentSubStep === 'rubrics' ? 'bg-blue-600 text-white' : 'bg-green-500 text-white'
             }`}>
               {currentSubStep === 'rubrics' ? '1' : <Check className="w-5 h-5" />}
             </div>
-            <span className={`${currentSubStep === 'rubrics' ? 'text-slate-900' : 'text-slate-600'}`}>
+           <span className={`${currentSubStep === 'rubrics' ? 'text-slate-900' : 'text-slate-600'}`}>
               Configure Rubrics
             </span>
           </div>
-          <div className="h-0.5 flex-1 bg-slate-300" />
+          <div className="h-0.5 flex-1 bg-slate-300" />          
           <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
               currentSubStep === 'questions' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'
             }`}>
               2
             </div>
-            <span className={`${currentSubStep === 'questions' ? 'text-slate-900' : 'text-slate-500'}`}>
+             <span className={`${currentSubStep === 'questions' ? 'text-slate-900' : 'text-slate-500'}`}>
               Generate Questions
             </span>
           </div>
         </div>
       )}
 
-      {/* Rubrics Display - Show only in rubrics step or for non-audio stages */}
-      {(currentSubStep === 'rubrics' || stage.id !== 'audio_interview') && (
-        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-          <h3 className="text-slate-900 mb-4 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-blue-600" />
-            Evaluation Rubrics for {stage.name}
-          </h3>
-          <div className="space-y-3">
-            {stage.evaluationRubrics.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-4">
-                AI is preparing evaluation rubrics...
-              </p>
-            ) : (
-              stage.evaluationRubrics.map((rubric) => (
-                <div key={rubric.id} className="p-3 bg-white rounded-lg border border-slate-200">
-                  {editingRubricId === rubric.id ? (
-                    // Edit Mode
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs text-slate-600 mb-1">Rubric Name</label>
-                        <input
-                          type="text"
-                          value={editedRubric?.name || ''}
-                          onChange={(e) => updateEditedRubricField('name', e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-600 mb-1">Description</label>
-                        <textarea
-                          value={editedRubric?.description || ''}
-                          onChange={(e) => updateEditedRubricField('description', e.target.value)}
-                          rows={2}
-                          className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-600 mb-1">Weight (%)</label>
-                        <input
-                          type="number"
-                          value={editedRubric?.weight || 0}
-                          onChange={(e) => updateEditedRubricField('weight', parseInt(e.target.value) || 0)}
-                          min="0"
-                          max="100"
-                          className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={cancelEditingRubric}
-                          className="px-3 py-1 text-sm border border-slate-300 text-slate-700 rounded hover:bg-slate-50 transition-colors flex items-center gap-1"
-                        >
-                          <X className="w-4 h-4" />
-                          Cancel
-                        </button>
-                        <button
-                          onClick={saveEditedRubric}
-                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
-                        >
-                          <Check className="w-4 h-4" />
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    // Display Mode
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <h4 className="text-slate-900 mb-1">{rubric.name}</h4>
-                        <p className="text-sm text-slate-600">{rubric.description}</p>
-                        {rubric.weight && (
-                          <p className="text-xs text-slate-500 mt-1">Weight: {rubric.weight}%</p>
-                        )}
-                      </div>
-                      {currentSubStep === 'rubrics' && (
-                        <div className="flex gap-1">
+      {/* Main Content Area */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        
+        {/* Rubrics/Questions Display - 1/3 width */}
+        <div className="lg:col-span-1">
+        {(currentSubStep === 'rubrics' || stage.id !== 'audio_interview') && (
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <h3 className="text-slate-900 mb-4 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-blue-600" />
+              Evaluation Rubrics for {stage.name}
+            </h3>
+            <div className="space-y-3">
+              {stage.evaluationRubrics.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-4">
+                  AI is preparing evaluation rubrics...
+                </p>
+              ) : (
+                stage.evaluationRubrics.map((rubric) => (
+                  <div key={rubric.id} className="p-3 bg-white rounded-lg border border-slate-200">
+                    {editingRubricId === rubric.id ? (
+                      // Edit Mode
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Rubric Name</label>
+                          <input
+                            type="text"
+                            value={editedRubric?.name || ''}
+                            onChange={(e) => updateEditedRubricField('name', e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Description</label>
+                          <textarea
+                            value={editedRubric?.description || ''}
+                            onChange={(e) => updateEditedRubricField('description', e.target.value)}
+                            rows={2}
+                            className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Weight (%)</label>
+                          <input
+                            type="number"
+                            value={editedRubric?.weight || 0}
+                            onChange={(e) => updateEditedRubricField('weight', parseInt(e.target.value) || 0)}
+                            min="0"
+                            max="100"
+                            className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
                           <button
-                            onClick={() => startEditingRubric(rubric)}
-                            className="p-1 text-slate-400 hover:text-blue-500 transition-colors"
-                            title="Edit rubric"
+                            onClick={cancelEditingRubric}
+                            className="px-3 py-1 text-sm border border-slate-300 text-slate-700 rounded hover:bg-slate-50 transition-colors flex items-center gap-1"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <X className="w-4 h-4" />
+                            Cancel
                           </button>
                           <button
-                            onClick={() => removeRubric(rubric.id)}
-                            className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-                            title="Delete rubric"
+                            onClick={saveEditedRubric}
+                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Check className="w-4 h-4" />
+                            Save
                           </button>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
+                      </div>
+                    ) : (
+                      // Display Mode
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <h4 className="text-slate-900 mb-1">{rubric.name}</h4>
+                          <p className="text-sm text-slate-600">{rubric.description}</p>
+                          {rubric.weight && (
+                            <p className="text-xs text-slate-500 mt-1">Weight: {rubric.weight}%</p>
+                          )}
+                        </div>
+                        {currentSubStep === 'rubrics' && (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => startEditingRubric(rubric)}
+                              className="p-1 text-slate-400 hover:text-blue-500 transition-colors"
+                              title="Edit rubric"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => removeRubric(rubric.id)}
+                              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                              title="Delete rubric"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Questions Display - Only show in questions step */}
-      {stage.id === 'audio_interview' && currentSubStep === 'questions' && (
-        <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-          <h3 className="text-slate-900 mb-4">AI-Generated Interview Questions</h3>
-          <p className="text-sm text-slate-600 mb-3">
-            Based on the evaluation rubrics, here are 10 suggested questions for the audio interview:
-          </p>
-          <div className="space-y-2">
-            {!stage.questions || stage.questions.length === 0 ? (
+          {stage.id === 'audio_interview' && currentSubStep === 'questions' && (
+            <div className="p-4 bg-gradient-to-br from-purple-50 to-slate-50 rounded-lg border border-purple-200 h-full">
+              <h3 className="text-slate-900 font-semibold mb-3">Interview Questions</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {!stage.questions || stage.questions.length === 0 ? (
               <p className="text-sm text-slate-500 text-center py-4">
                 Generating interview questions...
               </p>
             ) : (
-              stage.questions.map((q, index) => (
+                  stage.questions.map((q, index) => (
                 <DraggableQuestion
                   key={q.id}
                   question={q}
@@ -638,89 +639,106 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
                   onCancel={cancelEditingQuestion}
                   updateField={updateEditedQuestionField}
                   onDragStart={setDraggedQuestionIndex}
-                  onDragOver={(e, hoverIndex) => {
-                    if (draggedQuestionIndex !== null) {
-                      moveQuestion(draggedQuestionIndex, hoverIndex);
-                    }
-                  }}
-                  onDrop={() => setDraggedQuestionIndex(null)}
+                  onDragOver={(e, hoverIndex) => setDragOverIndex(hoverIndex)}
+                  onDrop={(dropIndex) => {
+                        if (draggedQuestionIndex !== null) {
+                          moveQuestion(draggedQuestionIndex, dropIndex);
+                        }
+                        setDraggedQuestionIndex(null);
+                        setDragOverIndex(null);
+                      }}
                 />
               ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Chat Interface - Show for all stages in rubrics step, and also in questions step for audio_interview */}
-      {(currentSubStep === 'rubrics' || stage.id !== 'audio_interview' || currentSubStep === 'questions') && (
-        <div className="border border-slate-200 rounded-lg overflow-hidden">
-          {/* Chat Messages */}
-          <div className="h-64 overflow-y-auto p-4 space-y-4 bg-white">
-            {stage.chatHistory.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] p-3 rounded-lg ${
-                    message.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-900'
-                  }`}
-                >
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                </div>
+                )}
               </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-slate-100 p-3 rounded-lg">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          )}
+        </div>
+
+        {/* Chat Interface - 2/3 width */}
+        <div className="lg:col-span-2">
+          <div className="border border-slate-200 rounded-lg overflow-hidden shadow-lg bg-white">
+            
+            {/* Chat Messages */}
+            <div className="h-64 overflow-y-auto p-4 space-y-4 bg-white">
+              {stage.chatHistory.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[80%] p-3 rounded-lg ${
+                      message.role === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-100 text-slate-900'
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   </div>
                 </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
+              ))}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-slate-100 p-3 rounded-lg">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
 
-          {/* Chat Input */}
-          <div className="p-4 bg-slate-50 border-t border-slate-200">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={userMessage}
-                onChange={(e) => setUserMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder={
-                  currentSubStep === 'questions' 
-                    ? "Ask AI to modify questions or generate new ones..." 
-                    : "Ask AI to modify rubrics or add new ones..."
-                }
-                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={isLoading}
-              />
-              <button
-                onClick={handleSendMessage}
-                disabled={isLoading || !userMessage.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
-              >
-                <Send className="w-5 h-5" />
-              </button>
+
+            {/* Chat Input */}
+            <div className="p-4 bg-white border-t border-slate-200">
+              {needsClarification && clarificationPrompt && (
+                <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-900">{clarificationPrompt}</p>
+                </div>
+              )}
+              
+              <div className="flex gap-2">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={userMessage}
+                  onChange={(e) => setUserMessage(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                  placeholder={
+                    currentSubStep === 'questions' 
+                      ? "Ask me to modify questions, add new ones, or explain my suggestions..." 
+                      : "Chat with me to customize rubrics - add, remove, or modify anything..."
+                  }
+                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isLoading}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={isLoading || !userMessage.trim()}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg hover:from-blue-700 hover:to-blue-600 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <p className="text-xs text-slate-500 mt-2 text-center">
+                💡 Tip: Just chat naturally - I understand context and can help refine your hiring process
+              </p>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Navigation */}
       <div className="flex justify-between pt-4">
         <button
-          onClick={currentSubStep === 'questions' && stage.id === 'audio_interview' ? handleBackToRubrics : onBack}
-          className="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+          onClick={currentSubStep === 'questions' && stage.id === 'audio_interview' ? () => setCurrentSubStep('rubrics') : onBack}
+          className="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
         >
-          Back
+          ← Back
         </button>
         <button
           onClick={
@@ -728,237 +746,38 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
               ? handleProceedToQuestions 
               : onNext
           }
-          disabled={!isButtonEnabled}
-          className={`px-6 py-3 rounded-lg transition-colors ${
-            isButtonEnabled
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
+          disabled={stage.id === 'audio_interview' ? (currentSubStep === 'rubrics' ? !canProceed : !canProceedToNext) : !canProceed}
+          className={`px-6 py-3 rounded-lg transition-all font-medium shadow-md ${
+            (stage.id === 'audio_interview' ? (currentSubStep === 'rubrics' ? canProceed : canProceedToNext) : canProceed)
+              ? ' bg-blue-600 text-white hover:from-blue-700 hover:to-blue-600 hover:shadow-lg'
               : 'bg-slate-200 text-slate-400 cursor-not-allowed'
           }`}
         >
           {stage.id === 'audio_interview' && currentSubStep === 'rubrics'
-            ? 'Generate Questions'
+            ? 'Generate Questions →'
             : isLastStage 
-            ? 'Review Configuration' 
-            : 'Next Stage'}
+            ? 'Review & Finish →' 
+            : 'Next Stage →'}
         </button>
       </div>
     </div>
   );
 }
 
-function getDefaultRubricsForStage(stageId: string, designation: string): EvaluationRubric[] {
-  const rubricsByStage: Record<string, EvaluationRubric[]> = {
-    resume_screening: [
-      {
-        id: 'rs-1',
-        name: 'Quantifiable Achievements',
-        description: 'Measurable results and impact in previous roles with specific metrics and numbers',
-        weight: 25,
-      },
-      {
-        id: 'rs-2',
-        name: 'Technical Skills Match',
-        description: 'Alignment of technical competencies with job requirements',
-        weight: 30,
-      },
-      {
-        id: 'rs-3',
-        name: 'Experience Relevance',
-        description: 'Years of relevant experience and progression in similar roles',
-        weight: 25,
-      },
-      {
-        id: 'rs-4',
-        name: 'Education & Certifications',
-        description: 'Academic qualifications and professional certifications',
-        weight: 20,
-      },
-    ],
-    audio_interview: [
-      {
-        id: 'ai-1',
-        name: 'Communication Skills',
-        description: 'Clarity, articulation, and professional communication',
-        weight: 20,
-      },
-      {
-        id: 'ai-2',
-        name: 'Technical Depth',
-        description: 'Deep understanding of technical concepts and problem-solving approach',
-        weight: 30,
-      },
-      {
-        id: 'ai-3',
-        name: 'Cultural Fit',
-        description: 'Alignment with company values and team dynamics',
-        weight: 25,
-      },
-      {
-        id: 'ai-4',
-        name: 'Motivation & Interest',
-        description: 'Genuine interest in the role and long-term career goals',
-        weight: 25,
-      },
-    ],
-    assignment: [
-      {
-        id: 'as-1',
-        name: 'Code Quality',
-        description: 'Clean, maintainable, and well-structured code',
-        weight: 30,
-      },
-      {
-        id: 'as-2',
-        name: 'Problem Solving',
-        description: 'Approach to solving the given problem and edge case handling',
-        weight: 30,
-      },
-      {
-        id: 'as-3',
-        name: 'Best Practices',
-        description: 'Following industry standards and best practices',
-        weight: 20,
-      },
-      {
-        id: 'as-4',
-        name: 'Documentation',
-        description: 'Clear documentation and code comments',
-        weight: 20,
-      },
-    ],
-    personal_interview: [
-      {
-        id: 'pi-1',
-        name: 'Leadership & Collaboration',
-        description: 'Ability to lead projects and work effectively in teams',
-        weight: 30,
-      },
-      {
-        id: 'pi-2',
-        name: 'Problem-Solving Approach',
-        description: 'Methodology for tackling complex challenges',
-        weight: 25,
-      },
-      {
-        id: 'pi-3',
-        name: 'Growth Mindset',
-        description: 'Willingness to learn and adapt to new technologies',
-        weight: 25,
-      },
-      {
-        id: 'pi-4',
-        name: 'Past Experience Discussion',
-        description: 'Quality of insights from previous work experiences',
-        weight: 20,
-      },
-    ],
-    founders_round: [
-      {
-        id: 'fr-1',
-        name: 'Strategic Thinking',
-        description: 'Understanding of business context and strategic decisions',
-        weight: 30,
-      },
-      {
-        id: 'fr-2',
-        name: 'Company Vision Alignment',
-        description: 'Alignment with long-term company vision and goals',
-        weight: 30,
-      },
-      {
-        id: 'fr-3',
-        name: 'Leadership Potential',
-        description: 'Potential to take on leadership roles and grow with the company',
-        weight: 25,
-      },
-      {
-        id: 'fr-4',
-        name: 'Cultural Impact',
-        description: 'Potential positive impact on company culture',
-        weight: 15,
-      },
-    ],
-  };
-
-  return rubricsByStage[stageId] || [];
-}
-
-function getDefaultQuestionsForStage(stageId: string, rubrics: EvaluationRubric[]) {
+// Fallback functions (same as before but simplified)
+function getDefaultRubricsForStage(stageId: string) {
   return [
-    { id: `q-${Date.now()}-1`, question: 'Can you describe a recent project where you demonstrated strong technical skills?', rubricId: rubrics[0]?.id || '' },
-    { id: `q-${Date.now()}-2`, question: 'How do you approach communicating complex technical concepts to non-technical stakeholders?', rubricId: rubrics[0]?.id || '' },
-    { id: `q-${Date.now()}-3`, question: 'What motivates you about this role and our company?', rubricId: rubrics[1]?.id || '' },
-    { id: `q-${Date.now()}-4`, question: 'Describe a time when you had to adapt to a significant change in your work environment.', rubricId: rubrics[2]?.id || '' },
-    { id: `q-${Date.now()}-5`, question: 'How do you stay updated with the latest technologies in your field?', rubricId: rubrics[0]?.id || '' },
-    { id: `q-${Date.now()}-6`, question: 'Tell me about a challenging problem you solved recently and your approach.', rubricId: rubrics[1]?.id || '' },
-    { id: `q-${Date.now()}-7`, question: 'How do you handle disagreements with team members?', rubricId: rubrics[2]?.id || '' },
-    { id: `q-${Date.now()}-8`, question: 'What are your long-term career goals?', rubricId: rubrics[3]?.id || '' },
-    { id: `q-${Date.now()}-9`, question: 'Describe your ideal work environment and team culture.', rubricId: rubrics[2]?.id || '' },
-    { id: `q-${Date.now()}-10`, question: 'How do you prioritize tasks when working on multiple projects?', rubricId: rubrics[0]?.id || '' },
+    { id: `${stageId}-1`, name: 'Relevant Experience', description: 'Quality and relevance of past work', weight: 30 },
+    { id: `${stageId}-2`, name: 'Skills Match', description: 'Alignment with job requirements', weight: 30 },
+    { id: `${stageId}-3`, name: 'Problem Solving', description: 'Analytical and critical thinking', weight: 25 },
+    { id: `${stageId}-4`, name: 'Cultural Fit', description: 'Team and company alignment', weight: 15 },
   ];
 }
 
-function generateAIResponse(userMessage: string, stage: StageConfig): {
-  message: string;
-  updatedRubrics?: EvaluationRubric[];
-  questions?: any[];
-} {
-  const lowerMessage = userMessage.toLowerCase();
-
-  // Handle adding new rubric
-  if (lowerMessage.includes('add') && (lowerMessage.includes('rubric') || lowerMessage.includes('criteria'))) {
-    const newRubric: EvaluationRubric = {
-      id: `custom-${Date.now()}`,
-      name: 'Account Management',
-      description: 'Experience in managing client accounts and relationships',
-      weight: 20,
-    };
-    
-    return {
-      message: "I've added a new rubric for 'Account Management'. This will evaluate the candidate's experience in managing client accounts and relationships. Would you like me to adjust the weights or modify any other rubrics?",
-      updatedRubrics: [...stage.evaluationRubrics, newRubric],
-    };
-  }
-
-  // Handle removing rubric
-  if (lowerMessage.includes('remove') || lowerMessage.includes('delete')) {
-    const updatedRubrics = stage.evaluationRubrics.slice(0, -1);
-    return {
-      message: "I've removed the last rubric. The remaining evaluation criteria have been adjusted accordingly. Is there anything else you'd like to change?",
-      updatedRubrics,
-    };
-  }
-
-  // Handle weight adjustment
-  if (lowerMessage.includes('weight') || lowerMessage.includes('increase') || lowerMessage.includes('decrease')) {
-    return {
-      message: "I've adjusted the weights of the evaluation rubrics to better reflect your priorities. The rubrics are now balanced to give more emphasis to technical skills and problem-solving abilities.",
-    };
-  }
-
-  // Handle question generation for audio interview
-  if (stage.id === 'audio_interview' && (lowerMessage.includes('question') || lowerMessage.includes('generate'))) {
-    const questions = [
-      { id: 'q1', question: 'Can you describe a recent project where you demonstrated strong technical skills?', rubricId: 'ai-2' },
-      { id: 'q2', question: 'How do you approach communicating complex technical concepts to non-technical stakeholders?', rubricId: 'ai-1' },
-      { id: 'q3', question: 'What motivates you about this role and our company?', rubricId: 'ai-4' },
-      { id: 'q4', question: 'Describe a time when you had to adapt to a significant change in your work environment.', rubricId: 'ai-3' },
-      { id: 'q5', question: 'How do you stay updated with the latest technologies in your field?', rubricId: 'ai-2' },
-      { id: 'q6', question: 'Tell me about a challenging problem you solved recently and your approach.', rubricId: 'ai-2' },
-      { id: 'q7', question: 'How do you handle disagreements with team members?', rubricId: 'ai-3' },
-      { id: 'q8', question: 'What are your long-term career goals?', rubricId: 'ai-4' },
-      { id: 'q9', question: 'Describe your ideal work environment and team culture.', rubricId: 'ai-3' },
-      { id: 'q10', question: 'How do you prioritize tasks when working on multiple projects?', rubricId: 'ai-1' },
-    ];
-
-    return {
-      message: "I've generated 10 interview questions based on your evaluation rubrics. These questions are designed to assess communication skills, technical depth, cultural fit, and motivation. Each question maps to one or more rubrics.",
-      questions,
-    };
-  }
-
-  // Default response
-  return {
-    message: "I understand you'd like to make changes to the evaluation rubrics. I can help you:\n\n• Add new rubrics based on your specific needs\n• Remove or modify existing rubrics\n• Adjust the weights of different criteria\n• Generate interview questions (for audio interview stage)\n\nWhat would you like me to do?",
-  };
+function getDefaultQuestionsForStage(rubrics: any[]) {
+  return Array.from({ length: 10 }, (_, i) => ({
+    id: `q-${Date.now()}-${i}`,
+    question: `Tell me about a time when you demonstrated ${rubrics[i % rubrics.length]?.name.toLowerCase()}.`,
+    rubricId: rubrics[i % rubrics.length]?.id || '',
+  }));
 }

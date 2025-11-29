@@ -1,4 +1,4 @@
-import { Lock, LockOpen, GripVertical } from 'lucide-react';
+import { Lock, Unlock, GripVertical } from 'lucide-react';
 import { useState } from 'react';
 import { JobSetupData, StageConfig } from '../types/job-setup';
 
@@ -79,7 +79,7 @@ function DraggableStageCard({ stage, index, onToggle, onDragStart, onDragOver, o
           {stage.locked ? (
             <Lock className="w-5 h-5 text-slate-400" />
           ) : (
-            <LockOpen className="w-5 h-5 text-slate-400" />
+            <Unlock className="w-5 h-5 text-slate-400" />
           )}
         </div>
       </div>
