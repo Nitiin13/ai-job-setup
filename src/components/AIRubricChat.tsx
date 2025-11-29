@@ -324,40 +324,44 @@ export function AIRubricChat({ stage, jobData, setJobData, onNext, onBack, isLas
     setIsLoading(true);
     setCurrentSubStep('questions');
 
-    const transitionMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'assistant',
-      content: `Great! Now let me generate interview questions based on these rubrics. I'll create questions that help you evaluate candidates effectively...`,
-      timestamp: new Date(),
-    };
-
-    updateStage({
-      ...stage,
-      chatHistory: [...stage.chatHistory, transitionMessage],
-    });
-
+    
     try {
-      const result = await aiAPI.generateQuestions({
-        stageId: stage.id,
-        designation: jobData.designation,
-        rubrics: stage.evaluationRubrics,
-        jobDescription: jobData.jobDescriptionPdf?.parsedText,
-      });
-
-      if (result.success) {
-        const aiMessage: ChatMessage = {
-          id: `msg-${Date.now() + 1}`,
+      if(!stage?.questions || stage?.questions.length==0){
+        const transitionMessage: ChatMessage = {
+          id: `msg-${Date.now()}`,
           role: 'assistant',
-          content: result.data.message,
+          content: `Great! Now let me generate interview questions based on these rubrics. I'll create questions that help you evaluate candidates effectively...`,
           timestamp: new Date(),
         };
 
         updateStage({
           ...stage,
-          chatHistory: [...stage.chatHistory, transitionMessage, aiMessage],
-          questions: result.data.questions,
+          chatHistory: [...stage.chatHistory, transitionMessage],
         });
+
+        const result = await aiAPI.generateQuestions({
+          stageId: stage.id,
+          designation: jobData.designation,
+          rubrics: stage.evaluationRubrics,
+          jobDescription: jobData.jobDescriptionPdf?.parsedText,
+        });
+
+        if (result.success) {
+          const aiMessage: ChatMessage = {
+            id: `msg-${Date.now() + 1}`,
+            role: 'assistant',
+            content: result.data.message,
+            timestamp: new Date(),
+          };
+
+          updateStage({
+            ...stage,
+            chatHistory: [...stage.chatHistory, transitionMessage, aiMessage],
+            questions: result.data.questions,
+          });
+        }
       }
+     
     } catch (error) {
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now() + 1}`,

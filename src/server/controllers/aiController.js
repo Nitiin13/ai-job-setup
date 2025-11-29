@@ -35,7 +35,6 @@ You should:
 2. Explain your reasoning for suggestions
 3. Consider the specific stage requirements
 4. Ensure rubrics are measurable and actionable
-5. Keep weights balanced (sum to 100)
 
 When returning rubrics, use this JSON structure:
 {
@@ -43,8 +42,7 @@ When returning rubrics, use this JSON structure:
   "rubrics": [
     {
       "name": "Rubric Name",
-      "description": "Clear description",
-      "weight": number
+      "description": "Clear description"
     }
   ],
   "needsClarification": false,
