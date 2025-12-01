@@ -188,30 +188,31 @@ export function ReviewStep({ jobData, onBack }: ReviewStepProps) {
 function buildFinalConfig(jobData: JobSetupData) {
   const stages: any = {};
 
-  Object.entries(jobData.stages).forEach(([key, stage]) => {
-    if (stage.enabled) {
-      stages[key] = {
-        enabled: true,
-        locked: stage.locked,
-        evaluation_rubrics: stage.evaluationRubrics.map((rubric) => ({
-          name: rubric.name,
-          description: rubric.description,
-          weight: rubric.weight,
-        })),
-        ...(stage.questions && stage.questions.length > 0 && {
-          questions: stage.questions.map((q) => ({
-            question: q.question,
-            rubric_id: q.rubricId,
-          })),
-        }),
-        chat_history: stage.chatHistory.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-          timestamp: msg.timestamp.toISOString(),
-        })),
-      };
-    }
-  });
+ Object.entries(jobData.stages).forEach(([key, stage]) => {
+  if (stage.enabled) {
+    stages[key] = {
+      enabled: true,
+      // locked: stage.locked,
+
+      // Convert evaluation rubrics into formatted strings
+      evaluation_rubrics: stage.evaluationRubrics.map((rubric, index) => 
+        `${index + 1}. ${rubric.name} -> ${rubric.description}`
+      ),
+
+      // Convert questions into simple array of question strings
+      ...(stage.questions && stage.questions.length > 0 && {
+        questions: stage.questions.map((q) => q.question),
+      }),
+
+      // chat_history: stage.chatHistory.map((msg) => ({
+      //   role: msg.role,
+      //   content: msg.content,
+      //   timestamp: msg.timestamp.toISOString(),
+      // })),
+    };
+  }
+});
+
 
   return {
     designation: jobData.designation,
@@ -222,9 +223,9 @@ function buildFinalConfig(jobData: JobSetupData) {
     },
     stages,
     created_at: new Date().toISOString(),
-    gemini_integration: {
-      model: 'gemini-2.0-flash-exp',
-      api_endpoint: 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-exp',
-    },
+    // gemini_integration: {
+    //   model: 'gemini-2.0-flash-exp',
+    //   api_endpoint: 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-exp',
+    // },
   };
 }
