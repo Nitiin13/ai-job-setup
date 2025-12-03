@@ -121,7 +121,7 @@ export const generateRubrics = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const stageContext = getStageContext(stageId);
     const stageName = stageId.replace(/_/g, ' ');
@@ -204,7 +204,7 @@ export const chatWithAI = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const stageContext = getStageContext(stageId);
     const stageName = stageId.replace(/_/g, ' ');
@@ -301,7 +301,7 @@ export const generateQuestions = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const stageContext = getStageContext(stageId);
     const stageName = stageId.replace(/_/g, ' ');
@@ -373,7 +373,7 @@ export const analyzeJobDescription = async (req, res) => {
       });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const systemPrompt = getSystemPrompt({
       type: 'analysis',
